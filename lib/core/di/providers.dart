@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../data/local/database.dart';
 import '../../data/remote/frappe_client.dart';
+import '../../data/repositories/catalog_repository.dart';
 import '../../data/repositories/invoice_repository.dart';
 import '../../domain/pricing/tax_engine.dart';
 import '../../sync/sync_manager.dart';
@@ -34,6 +35,14 @@ final taxEngineProvider = Provider<TaxEngine>((_) => const TaxEngine());
 
 final invoiceRepositoryProvider = Provider<InvoiceRepository>(
   (ref) => InvoiceRepository(ref.watch(databaseProvider)),
+);
+
+final catalogRepositoryProvider = Provider<CatalogRepository>(
+  (ref) => CatalogRepository(
+    ref.watch(frappeClientProvider),
+    ref.watch(databaseProvider),
+    ref.watch(appConfigProvider),
+  ),
 );
 
 final syncManagerProvider = Provider<SyncManager>((ref) {

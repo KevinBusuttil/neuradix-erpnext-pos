@@ -87,4 +87,13 @@ class Cart {
 
   CartLine? lineFor(String itemCode) =>
       lines.firstWhereOrNull((l) => l.itemCode == itemCode);
+
+  /// New Cart instance sharing field values with a fresh `lines` list, so
+  /// Riverpod sees a changed reference after a mutation.
+  Cart cloneRef() => Cart(
+        customer: customer,
+        lines: List.of(lines),
+        additionalDiscountPercentage: additionalDiscountPercentage,
+        isReturn: isReturn,
+      );
 }

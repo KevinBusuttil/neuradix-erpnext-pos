@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 import '../../core/config/app_config.dart';
@@ -53,11 +55,12 @@ class FrappeClient {
     int limit = 50,
   }) async {
     await _ensureBase();
+    // Frappe's REST API expects `filters` and `fields` as JSON-encoded strings.
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/resource/$doctype',
       queryParameters: {
-        if (filters != null) 'filters': filters,
-        if (fields != null) 'fields': fields,
+        if (filters != null) 'filters': jsonEncode(filters),
+        if (fields != null) 'fields': jsonEncode(fields),
         'limit_page_length': limit,
       },
     );
