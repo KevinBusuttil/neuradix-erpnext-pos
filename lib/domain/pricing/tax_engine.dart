@@ -45,6 +45,7 @@ class CartTotals {
       taxLines: taxes,
     );
   }
+}
 
 class TaxLine {
   const TaxLine({
