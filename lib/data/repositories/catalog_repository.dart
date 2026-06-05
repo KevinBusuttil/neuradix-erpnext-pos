@@ -51,8 +51,33 @@ class CatalogRepository {
       priceList: p['selling_price_list'] as String,
       warehouse: p['warehouse'] as String,
       currency: (p['currency'] as String?) ?? 'EUR',
+      company: (p['company'] as String?) ?? '',
     );
     return _ctx!;
+  }
+
+  /// All POS profiles the user can pick from.
+  Future<List<String>> listProfiles() => _client.listProfiles();
+
+  /// Switch the active POS profile and invalidate the cached context.
+  Future<void> setProfile(String name) async {
+    await _config.setPosProfile(name);
+    _ctx = null;
+  }
+
+  /// Absolute URL of the company logo (for branding), or null.
+  Future<String?> companyLogoUrl() async {
+    try {
+      final ctx = await profileContext();
+      if (ctx.company.isEmpty) return null;
+      final logo = await _client.getValue('Company', ctx.company, 'company_logo');
+      if (logo is! String || logo.isEmpty) return null;
+      if (logo.startsWith('http')) return logo;
+      final site = await _config.siteUrl;
+      return '$site$logo';
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<String> _firstProfileName() async {
@@ -128,8 +153,8 @@ class CatalogRepository {
       final rows = await _client.list(
         'Customer',
         filters: term.isEmpty ? null : {'customer_name': ['like', '%$term%']},
-        fields: ['name', 'customer_name', 'mobile_no', 'email_id',
-          'customer_group', 'loyalty_program'],
+        fields: ['name', 'customer_name', 'customer_type', 'mobile_no',
+          'email_id', 'customer_group', 'territory', 'loyalty_program'],
         limit: 20,
       );
       return rows

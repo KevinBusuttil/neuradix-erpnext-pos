@@ -4,6 +4,15 @@ import 'package:dio/dio.dart';
 
 import '../../core/config/app_config.dart';
 
+/// A clean, human-readable error parsed from a Frappe response.
+class FrappeException implements Exception {
+  FrappeException(this.message, {this.statusCode});
+  final String message;
+  final int? statusCode;
+  @override
+  String toString() => message;
+}
+
 /// Thin wrapper over the Frappe/ERPNext REST + whitelisted-method API.
 ///
 /// Authentication uses a token pair (`Authorization: token <key>:<secret>`),
@@ -25,12 +34,42 @@ class FrappeClient {
     _dio.options
       ..baseUrl = url
       ..connectTimeout = const Duration(seconds: 15)
-      ..receiveTimeout = const Duration(seconds: 30)
-      ..headers['Content-Type'] = 'application/json';
+      ..receiveTimeout = const Duration(seconds: 60)
+      ..headers['Content-Type'] = 'application/json'
+      ..headers['X-Frappe-CSRF-Token'] = '';
     if (key != null && secret != null) {
       _dio.options.headers['Authorization'] = 'token $key:$secret';
     }
   }
+
+  /// Turn a DioException into a [FrappeException] carrying the server's actual
+  /// message (`_server_messages` / `exception`) instead of an opaque HTTP code.
+  Never _rethrow(DioException e) {
+    final data = e.response?.data;
+    final code = e.response?.statusCode;
+    String? msg;
+    if (data is Map) {
+      // _server_messages is a JSON string of a list of JSON strings.
+      final sm = data['_server_messages'];
+      if (sm is String && sm.isNotEmpty) {
+        try {
+          final list = (jsonDecode(sm) as List)
+              .map((e) => jsonDecode(e as String) as Map)
+              .map((m) => (m['message'] ?? '').toString())
+              .where((s) => s.isNotEmpty)
+              .toList();
+          if (list.isNotEmpty) msg = list.join('\n');
+        } catch (_) {}
+      }
+      msg ??= (data['exception'] ?? data['_error_message'] ?? data['message'])
+          ?.toString();
+    }
+    msg = _stripHtml(msg ?? e.message ?? 'Request failed');
+    throw FrappeException(msg, statusCode: code);
+  }
+
+  String _stripHtml(String s) =>
+      s.replaceAll(RegExp(r'<[^>]*>'), '').trim();
 
   /// Call a whitelisted server method: `/api/method/<dotted.path>`.
   Future<dynamic> call(
@@ -40,11 +79,14 @@ class FrappeClient {
   }) async {
     await _ensureBase();
     final path = '/api/method/$method';
-    final res = post
-        ? await _dio.post<Map<String, dynamic>>(path, data: args)
-        : await _dio.get<Map<String, dynamic>>(path,
-            queryParameters: args);
-    return res.data?['message'];
+    try {
+      final res = post
+          ? await _dio.post<Map<String, dynamic>>(path, data: args)
+          : await _dio.get<Map<String, dynamic>>(path, queryParameters: args);
+      return res.data?['message'];
+    } on DioException catch (e) {
+      _rethrow(e);
+    }
   }
 
   /// Generic resource list: `/api/resource/<DocType>`.
@@ -55,16 +97,38 @@ class FrappeClient {
     int limit = 50,
   }) async {
     await _ensureBase();
-    // Frappe's REST API expects `filters` and `fields` as JSON-encoded strings.
-    final res = await _dio.get<Map<String, dynamic>>(
-      '/api/resource/$doctype',
-      queryParameters: {
-        if (filters != null) 'filters': jsonEncode(filters),
-        if (fields != null) 'fields': jsonEncode(fields),
-        'limit_page_length': limit,
-      },
-    );
-    return (res.data?['data'] as List<dynamic>?) ?? const [];
+    try {
+      // Frappe's REST API expects `filters` / `fields` as JSON-encoded strings.
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/api/resource/$doctype',
+        queryParameters: {
+          if (filters != null) 'filters': jsonEncode(filters),
+          if (fields != null) 'fields': jsonEncode(fields),
+          'limit_page_length': limit,
+        },
+      );
+      return (res.data?['data'] as List<dynamic>?) ?? const [];
+    } on DioException catch (e) {
+      _rethrow(e);
+    }
+  }
+
+  /// List POS Profile names available to the user.
+  Future<List<String>> listProfiles() async {
+    final rows = await list('POS Profile',
+        filters: {'disabled': 0}, fields: ['name'], limit: 50);
+    return rows.map((e) => (e as Map)['name'] as String).toList();
+  }
+
+  /// A single field value from a doc (uses frappe.client.get_value).
+  Future<dynamic> getValue(
+      String doctype, String name, String fieldname) async {
+    final msg = await call('frappe.client.get_value', args: {
+      'doctype': doctype,
+      'filters': name,
+      'fieldname': fieldname,
+    });
+    return (msg as Map?)?[fieldname];
   }
 
   // ---- POS-specific convenience methods (mirror the Mobile POS page) ----

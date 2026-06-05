@@ -10,8 +10,8 @@ import '../pos/cart_controller.dart';
 import '../pos/pos_providers.dart';
 
 /// Payment + complete order. Totals are authoritative (server `compute_si_taxes`
-/// when online; offline TaxEngine fallback). Zero payment = credit sale, which
-/// the server leaves outstanding.
+/// when online; offline TaxEngine fallback). Enter the amount tendered per
+/// method; leaving everything at 0 records an on-credit sale (left outstanding).
 class PaymentScreen extends ConsumerStatefulWidget {
   const PaymentScreen({super.key});
 
@@ -23,7 +23,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   late Future<CartTotals> _totalsFuture;
   final Map<String, TextEditingController> _amounts = {};
   bool _submitting = false;
-  bool _prefilled = false;
 
   @override
   void initState() {
@@ -43,10 +42,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   TextEditingController _ctrl(String mode) =>
       _amounts.putIfAbsent(mode, () => TextEditingController());
 
-  double get _paid => _amounts.values.fold(
-        0.0,
-        (s, c) => s + (double.tryParse(c.text) ?? 0),
-      );
+  double get _paid => _amounts.values
+      .fold(0.0, (s, c) => s + (double.tryParse(c.text) ?? 0));
 
   List<PaymentEntry> _entries(List<PaymentMode> modes) => [
         for (final m in modes)
@@ -61,8 +58,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   Future<void> _complete(List<PaymentMode> modes) async {
     setState(() => _submitting = true);
     final cart = ref.read(cartControllerProvider);
-    final res =
-        await ref.read(checkoutRepositoryProvider).submit(cart, _entries(modes));
+    final res = await ref
+        .read(checkoutRepositoryProvider)
+        .submit(cart, _entries(modes));
     if (!mounted) return;
     setState(() => _submitting = false);
 
@@ -74,16 +72,34 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         ref.read(cartControllerProvider.notifier).clear();
         _showDone('Saved offline — will sync automatically when online.');
       case CheckoutStatus.error:
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Submit failed: ${res.message}')),
-        );
+        _showError(res.message ?? 'Unknown error');
     }
+  }
+
+  void _showError(String message) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        icon: Icon(Icons.error_outline,
+            color: Theme.of(context).colorScheme.error),
+        title: const Text('Could not complete order'),
+        content: SingleChildScrollView(child: Text(message)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showDone(String message) {
     showDialog<void>(
       context: context,
+      barrierDismissible: false,
       builder: (_) => AlertDialog(
+        icon: const Icon(Icons.check_circle, color: Color(0xFF16A34A)),
         title: const Text('Order complete'),
         content: Text(message),
         actions: [
@@ -105,6 +121,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     final ctx = ref.watch(profileContextProvider);
     final fmt =
         NumberFormat.simpleCurrency(name: ctx.valueOrNull?.currency ?? 'EUR');
+    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Payment')),
@@ -119,33 +136,90 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('$e')),
             data: (modes) {
-              // Prefill the default (or first) mode with the grand total once.
-              if (!_prefilled && modes.isNotEmpty) {
-                final def =
-                    modes.firstWhere((m) => m.isDefault, orElse: () => modes.first);
-                _ctrl(def.name).text = totals.roundedTotal.toStringAsFixed(2);
-                _prefilled = true;
-              }
+              final remaining = totals.roundedTotal - _paid;
               final change = _paid - totals.roundedTotal;
               return Column(
                 children: [
+                  // Grand total banner
+                  Container(
+                    width: double.infinity,
+                    color: scheme.primaryContainer,
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        Text('Amount Due',
+                            style: TextStyle(
+                                color: scheme.onPrimaryContainer)),
+                        const SizedBox(height: 4),
+                        Text(
+                          fmt.format(totals.roundedTotal),
+                          style: TextStyle(
+                            fontSize: 34,
+                            fontWeight: FontWeight.bold,
+                            color: scheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   Expanded(
                     child: ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            'Enter the amount tendered per method. '
+                            'Tap a method to fill the remaining amount. '
+                            'Leave all at 0 for an on-credit sale.',
+                            style: TextStyle(color: Colors.black54),
+                          ),
+                        ),
                         for (final m in modes)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: TextField(
-                              controller: _ctrl(m.name),
-                              keyboardType: const TextInputType.numberWithOptions(
-                                  decimal: true),
-                              decoration: InputDecoration(
-                                labelText: m.name,
-                                border: const OutlineInputBorder(),
-                                prefixIcon: const Icon(Icons.payments_outlined),
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.payments_outlined,
+                                      color: scheme.primary),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(m.name,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w600)),
+                                  ),
+                                  SizedBox(
+                                    width: 140,
+                                    child: TextField(
+                                      controller: _ctrl(m.name),
+                                      textAlign: TextAlign.right,
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                              decimal: true),
+                                      decoration: const InputDecoration(
+                                        isDense: true,
+                                        hintText: '0.00',
+                                      ),
+                                      onChanged: (_) => setState(() {}),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Fill remaining',
+                                    icon: const Icon(Icons.keyboard_tab),
+                                    onPressed: () {
+                                      final rem = totals.roundedTotal -
+                                          (_paid -
+                                              (double.tryParse(
+                                                      _ctrl(m.name).text) ??
+                                                  0));
+                                      _ctrl(m.name).text =
+                                          (rem > 0 ? rem : 0).toStringAsFixed(2);
+                                      setState(() {});
+                                    },
+                                  ),
+                                ],
                               ),
-                              onChanged: (_) => setState(() {}),
                             ),
                           ),
                       ],
@@ -156,27 +230,32 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-                        _row('Grand Total', fmt.format(totals.roundedTotal),
-                            bold: true),
+                        _row('Net Total', fmt.format(totals.netTotal)),
+                        for (final t in totals.taxLines)
+                          _row(t.description, fmt.format(t.taxAmount)),
+                        if (totals.discountAmount != 0)
+                          _row('Discount',
+                              '-${fmt.format(totals.discountAmount)}'),
                         _row('Paid', fmt.format(_paid)),
                         _row(
-                          change >= 0 ? 'Change' : 'To Be Paid',
+                          change >= 0 ? 'Change' : 'Remaining',
                           fmt.format(change.abs()),
+                          bold: true,
+                          color: change < 0 ? scheme.error : null,
                         ),
                         const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            onPressed: _submitting ? null : () => _complete(modes),
-                            child: _submitting
-                                ? const SizedBox(
-                                    height: 18,
-                                    width: 18,
-                                    child:
-                                        CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : const Text('Complete Order'),
-                          ),
+                        FilledButton(
+                          onPressed: _submitting ? null : () => _complete(modes),
+                          child: _submitting
+                              ? const SizedBox(
+                                  height: 18,
+                                  width: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white),
+                                )
+                              : Text(_paid == 0
+                                  ? 'Complete (On Credit)'
+                                  : 'Complete Order'),
                         ),
                       ],
                     ),
@@ -190,10 +269,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     );
   }
 
-  Widget _row(String label, String value, {bool bold = false}) {
-    final style = bold
-        ? const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
-        : null;
+  Widget _row(String label, String value,
+      {bool bold = false, Color? color}) {
+    final style = TextStyle(
+      fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+      fontSize: bold ? 18 : 14,
+      color: color,
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(

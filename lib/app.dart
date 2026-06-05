@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/di/providers.dart';
+import 'core/theme/app_theme.dart';
 import 'features/auth/login_screen.dart';
 import 'features/pos/pos_screen.dart';
 
@@ -13,10 +14,7 @@ class NeuroPosApp extends ConsumerWidget {
     return MaterialApp(
       title: 'NeuroPOS',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF2563EB),
-      ),
+      theme: AppTheme.light(),
       home: const _Root(),
     );
   }

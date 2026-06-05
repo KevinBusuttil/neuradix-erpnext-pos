@@ -40,3 +40,27 @@ final cartTotalsProvider = Provider<CartTotals>((ref) {
 final paymentModesProvider = FutureProvider<List<PaymentMode>>(
   (ref) => ref.watch(catalogRepositoryProvider).paymentModes(),
 );
+
+/// Configured site URL (for building absolute image/logo URLs).
+final siteUrlProvider = FutureProvider<String?>(
+  (ref) => ref.watch(appConfigProvider).siteUrl,
+);
+
+/// Auth headers for fetching (possibly private) ERPNext files/images.
+final authHeadersProvider = FutureProvider<Map<String, String>>((ref) async {
+  final cfg = ref.watch(appConfigProvider);
+  final key = await cfg.apiKey;
+  final secret = await cfg.apiSecret;
+  if (key == null || secret == null) return const {};
+  return {'Authorization': 'token $key:$secret'};
+});
+
+/// Available POS profiles (for the profile picker).
+final posProfilesProvider = FutureProvider<List<String>>(
+  (ref) => ref.watch(catalogRepositoryProvider).listProfiles(),
+);
+
+/// Company logo URL for app branding.
+final companyLogoProvider = FutureProvider<String?>(
+  (ref) => ref.watch(catalogRepositoryProvider).companyLogoUrl(),
+);
