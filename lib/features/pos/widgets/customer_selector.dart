@@ -83,17 +83,25 @@ class _SheetState extends ConsumerState<_CustomerPickerSheet> {
                 loading: () =>
                     const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(child: Text('$e')),
-                data: (list) => ListView.builder(
+                data: (list) => ListView.separated(
                   itemCount: list.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (_, i) {
                     final c = list[i];
                     return ListTile(
-                      title: Text(c.display),
-                      subtitle: Text(
-                        [c.mobileNo, c.emailId]
-                            .where((s) => s != null && s.isNotEmpty)
-                            .join(' • '),
+                      leading: CircleAvatar(
+                        child: Text(c.display.isNotEmpty
+                            ? c.display[0].toUpperCase()
+                            : '?'),
                       ),
+                      title: Text(c.display),
+                      subtitle: c.subtitle.isEmpty ? null : Text(c.subtitle),
+                      trailing: c.customerType == null
+                          ? null
+                          : Chip(
+                              label: Text(c.customerType!),
+                              visualDensity: VisualDensity.compact,
+                            ),
                       onTap: () => Navigator.pop(context, c),
                     );
                   },

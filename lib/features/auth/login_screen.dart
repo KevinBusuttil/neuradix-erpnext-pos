@@ -36,16 +36,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('NeuroPOS — Connect')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
+          child: Card(
+            margin: const EdgeInsets.all(24),
+            child: Padding(
+            padding: const EdgeInsets.all(28),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Icon(Icons.point_of_sale, size: 56, color: scheme.primary),
+                const SizedBox(height: 8),
+                Text('NeuroPOS',
+                    style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: scheme.primary)),
+                const SizedBox(height: 4),
+                const Text('Connect to your ERPNext server',
+                    style: TextStyle(color: Colors.black54)),
+                const SizedBox(height: 24),
                 TextField(
                   controller: _site,
                   decoration: const InputDecoration(
@@ -78,6 +91,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );
