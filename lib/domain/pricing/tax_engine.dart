@@ -19,7 +19,32 @@ class CartTotals {
   final double grandTotal;
   final double roundedTotal;
   final List<TaxLine> taxLines;
-}
+
+  /// Parse the server `compute_si_taxes` response into [CartTotals].
+  factory CartTotals.fromCompute(Map<String, dynamic> msg) {
+    double d(Object? v) => (v as num?)?.toDouble() ?? 0;
+    final totals = Map<String, dynamic>.from((msg['totals'] ?? {}) as Map);
+    final taxes = ((msg['taxes'] as List?) ?? const [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .map((t) => TaxLine(
+              description: (t['description'] ?? '') as String,
+              rate: d(t['rate']),
+              taxAmount: d(t['tax_amount_after_discount_amount']),
+              accountHead: t['account_head'] as String?,
+            ))
+        .toList();
+    final grand = d(totals['grand_total']);
+    return CartTotals(
+      netTotal: d(totals['net_total']),
+      totalTaxesAndCharges: d(totals['total_taxes_and_charges']),
+      discountAmount: d(totals['discount_amount']),
+      grandTotal: grand,
+      roundedTotal: d(totals['rounded_total']) == 0
+          ? grand
+          : d(totals['rounded_total']),
+      taxLines: taxes,
+    );
+  }
 
 class TaxLine {
   const TaxLine({

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../core/config/app_config.dart';
+import '../../domain/models/payment.dart';
 import '../../domain/models/pos_customer.dart';
 import '../../domain/models/pos_item.dart';
 import '../local/database.dart';
@@ -152,6 +153,32 @@ class CatalogRepository {
               ))
           .toList();
     }
+  }
+
+  /// Payment modes for the current profile. Prefers the snapshot cache; falls
+  /// back to parsing the POS Profile `payments` table.
+  Future<List<PaymentMode>> paymentModes() async {
+    final ctx = await profileContext();
+    final cached = await _db.select(_db.modesOfPayment).get();
+    if (cached.isNotEmpty) {
+      return cached
+          .map((m) =>
+              PaymentMode(name: m.name, type: m.type, isDefault: m.isDefault))
+          .toList();
+    }
+    final row = await (_db.select(_db.posProfiles)
+          ..where((t) => t.name.equals(ctx.posProfile)))
+        .getSingleOrNull();
+    if (row == null) return const [];
+    final p = Map<String, dynamic>.from(jsonDecode(row.json) as Map);
+    final payments = (p['payments'] as List?) ?? const [];
+    return payments
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .map((m) => PaymentMode(
+              name: m['mode_of_payment'] as String,
+              isDefault: m['default'] == 1 || m['default'] == true,
+            ))
+        .toList();
   }
 
   /// Refresh the offline snapshot from the server (opportunistic, while online).

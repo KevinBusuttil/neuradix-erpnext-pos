@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/di/providers.dart';
+import '../../domain/models/payment.dart';
 import '../../domain/models/pos_customer.dart';
 import '../../domain/models/pos_item.dart';
 import '../../domain/pricing/tax_engine.dart';
@@ -28,9 +29,14 @@ final customerListProvider =
   return ref.watch(catalogRepositoryProvider).searchCustomers(term);
 });
 
-/// Offline-fallback totals for the current cart. While online, Phase 2 replaces
-/// this with the server's `compute_si_taxes`.
+/// Instant offline-calculated totals for the live cart pane (responsive). The
+/// authoritative server totals are fetched at checkout (see CheckoutRepository).
 final cartTotalsProvider = Provider<CartTotals>((ref) {
   final cart = ref.watch(cartControllerProvider);
   return ref.watch(taxEngineProvider).compute(cart);
 });
+
+/// Payment methods available for the current POS profile.
+final paymentModesProvider = FutureProvider<List<PaymentMode>>(
+  (ref) => ref.watch(catalogRepositoryProvider).paymentModes(),
+);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../payment/payment_screen.dart';
 import '../cart_controller.dart';
 import '../pos_providers.dart';
 import 'customer_selector.dart';
@@ -79,17 +80,16 @@ class CartPane extends ConsumerWidget {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: cart.isEmpty
+                  onPressed: cart.isEmpty || cart.customer == null
                       ? null
-                      : () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                  'Checkout & payment arrive in Phase 2'),
+                      : () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const PaymentScreen(),
                             ),
-                          );
-                        },
-                  child: const Text('Checkout'),
+                          ),
+                  child: Text(
+                    cart.customer == null ? 'Select a customer' : 'Checkout',
+                  ),
                 ),
               ),
             ],
